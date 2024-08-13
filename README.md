@@ -12,70 +12,198 @@ For automatic unpacking and repackaging of HashFS v2 packages you'll require the
 ## Synopsis
 Optimizes a mod package by removing clutter.
 
+## Syntax
+```
+Optimize-ModPackage [[-Path] <DirectoryInfo>] [-ScrubExtensions <string[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
+
+Optimize-ModPackage [-SetPacker] <FileInfo>
+
+Optimize-ModPackage -ModPackage <FileInfo> [-PackerPath <FileInfo>] [-Root <DirectoryInfo>] [-BufferLimit <ushort>] [-Force] [-Repackage] [-NoCompression] [-NoCleanup] [-ScrubExtensions <string[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
+```
+
 ## Parameters
 
-### Path
+### Path <IO.DirectoryInfo>
 Path to pre-extracted mod root directory.
+```
+Required?                    false
+Position?                    0
+Default value                
+Accept pipeline input?       true (ByValue)
+Accept wildcard characters?  false
+```
 
-### SetPacker
+### SetPacker <IO.FileInfo>
 Sets a persistent path to the SCS Packer executable. Must be set per-session.
+```
+Required?                    true
+Position?                    0
+Default value                
+Accept pipeline input?       true (ByValue)
+Accept wildcard characters?  false
+```
 
-### PackerPath
+### PackerPath <IO.FileInfo>
 Path to the SCS Packer executable.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### ModPackage
-The .scs mod package to unpack.
+### ModPackage <IO.FileInfo>
+The mod package to unpack.
+```
+Required?                    true
+Position?                    Named
+Default value                
+Accept pipeline input?       true (ByValue)
+Accept wildcard characters?  false
+```
 
-### Root
+### Root <IO.DirectoryInfo>
 Destination folder for unpacked files.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoScrub
+### NoScrub <>
 Disables file scrubbing.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### KeepEmpty
+### KeepEmpty <>
 Retains empty subdirectories.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoAttribFix
+### NoAttribFix <>
 Disables fixing file and folder attributes.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoUnitFix
+### NoUnitFix <>
 Disables automatic fixes of detected problems in unit files.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### KeepForeign
+### KeepForeign <>
 Retains foreign/invalid files.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoBinaryCheck
+### NoBinaryCheck <>
 Disables the safeguard for binary data scrubbing.
 Note: Misidentification of binary files as plaintext may occur in rare circumstances.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoManifestFix
+### NoManifestFix <>
 Disables mod manifest fixes, which include:
 - Icon file reference errors
 - Description file reference errors
 - Excess category definitions trimming
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### ScrubExtensions
+### ScrubExtensions <String[]>
 File extensions to target for scrubbing (default: .mat, .sui, .sii, .guids, .soundref).
 Note: Targeting .txt files is not recommended.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### BufferLimit
+### BufferLimit <UInt16>
 Limits I/O buffers during file unpacking.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### Force
+### Force <>
 Forces overwriting of files in the destination folder.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### ForceAcceptModRoot
-Accepts any mod root structure, bypassing validation.
-
-### Repackage
+### Repackage <>
 Repackages the mod into a HashFS v2 package after processing.
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoCompression
+### NoCompression <>
 Disables compression during repackaging (results in a larger file but faster process).
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
 
-### NoCleanup
+### NoCleanup <>
 Retains unpacked files after repackaging.
-
-## Input
-- System.IO.FileInfo
-- System.IO.DirectoryInfo
+```
+Required?                    false
+Position?                    Named
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
