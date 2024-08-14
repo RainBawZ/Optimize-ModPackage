@@ -167,7 +167,7 @@ Note: Targeting .txt files is not recommended.
 ```
 Required?                    false
 Position?                    Named
-Alias
+Alias                        Exts
 Default value                @('.mat', '.sui', '.sii', '.guids', '.soundref')
 Accept pipeline input?       false
 Accept wildcard characters?  false
