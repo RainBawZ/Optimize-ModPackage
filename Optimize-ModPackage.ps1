@@ -228,7 +228,7 @@ Function Optimize-ModPackage {
     )
     
     [Int64]$TotalTrimmed = 0
-	[Int32]$Iteration    = -1
+    [Int32]$Iteration    = -1
 
     [String[]]$FixedAttribs    = @()
     [String[]]$FixedUnits      = @()
@@ -399,17 +399,17 @@ Function Optimize-ModPackage {
         Write-Host -ForegroundColor Yellow ' Missing mod manifest (manifest.sii).'
     }
 
-	Write-Host -NoNewline ' Building file list... '
-	[IO.FileInfo[]]$Files = Get-ChildItem @GCIParams -File
+    Write-Host -NoNewline ' Building file list... '
+    [IO.FileInfo[]]$Files = Get-ChildItem @GCIParams -File
 
     # Get amount of padding characters needed for file name and size display
-	[Byte]$LongestName = ($Files | Where-Object {$_.Extension -In $ScrubExtensions} | ForEach-Object {[IO.Path]::GetRelativePath($Path.Fullname, $_.FullName)} | Sort-Object Length)[-1].Length + 1
-	[Byte]$LongestSize = ($Files | Where-Object {$_.Extension -In $ScrubExtensions} | ForEach-Object {[String]$_.Length} | Sort-Object Length)[-1].Length + 3
+    [Byte]$LongestName = ($Files | Where-Object {$_.Extension -In $ScrubExtensions} | ForEach-Object {[IO.Path]::GetRelativePath($Path.Fullname, $_.FullName)} | Sort-Object Length)[-1].Length + 1
+    [Byte]$LongestSize = ($Files | Where-Object {$_.Extension -In $ScrubExtensions} | ForEach-Object {[String]$_.Length} | Sort-Object Length)[-1].Length + 3
 
-	Write-Host -ForegroundColor Green "Done - $($Files.Count) files`n"
+    Write-Host -ForegroundColor Green "Done - $($Files.Count) files`n"
 
     # Iterate files
-	Foreach ($File in $Files) {
+    Foreach ($File in $Files) {
         $Iteration++
 
         [Console]::Title = "$([Math]::Round(($TotalTrimmed / 1KB), 2)) kBs trimmed. | $([Math]::Round($Iteration / $Files.Count * 100))%"
@@ -418,7 +418,7 @@ Function Optimize-ModPackage {
         [String]$Relative = [IO.Path]::GetRelativePath($Path.Fullname, $File.FullName)
 
         # Foreign file deletion
-		If (!$KeepForeign.IsPresent -And $File.Extension -NotIn $ProtectedExt -And $File.Name -NotIn $ProtectedFiles) {
+        If (!$KeepForeign.IsPresent -And $File.Extension -NotIn $ProtectedExt -And $File.Name -NotIn $ProtectedFiles) {
             
             Write-Host -NoNewline -ForegroundColor Yellow "$(" [FOREIGN] $Relative".PadRight($LongestName) + "$(" : $OrigSize".PadRight($LongestSize) + " -> ")")"
 
@@ -428,13 +428,13 @@ Function Optimize-ModPackage {
                 $DeletedFiles += $File.FullName
 
                 $TotalTrimmed += $OrigSize
-			    Write-Host -ForegroundColor Green "-$OrigSize [DELETED]"
+                Write-Host -ForegroundColor Green "-$OrigSize [DELETED]"
 
-			    Continue
+                Continue
             }
             Catch {Write-Host -ForegroundColor Red "$OrigSize [ERROR]"}
 
-		}
+        }
 
         # Fix attributes
         If (!$NoAttribFix.IsPresent -And $File.Attributes -ne 'Archive') {
@@ -456,7 +456,7 @@ Function Optimize-ModPackage {
         [Bool]$WriteBytes = $False
 
         # Try reading the file contents using ReadAllBytes()
-		Try   {[String]$RawContent = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($File.FullName)); $WriteBytes = $True}
+        Try   {[String]$RawContent = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($File.FullName)); $WriteBytes = $True}
 
         # Use regular Get-Content (Slower) if ReadAllBytes() fails
         Catch {[String]$RawContent = Get-Content $File.FullName -Raw -Encoding UTF8}
@@ -474,31 +474,31 @@ Function Optimize-ModPackage {
         $RawContent = [Regex]::Replace($RawContent, '(?i)(?m)(?<=^(?:\w+:\.?[\w\.]+)|(?:SiiNunit))\s*(?=\{)', '')
 
         [Collections.Generic.List[String]]$Lines   = $RawContent -Split "`n"
-		[Collections.Generic.List[String]]$Trimmed = @()
+        [Collections.Generic.List[String]]$Trimmed = @()
 
         #### Scrub all unnecessary whitespace and comments ####
 
-		ForEach ($Line in $Lines) {
+        ForEach ($Line in $Lines) {
 
-			[String]$Clean  = ''
+            [String]$Clean  = ''
             [Char]$Previous = $Null
-			[Bool]$inQuotes = $False
+            [Bool]$inQuotes = $False
 
-			ForEach ($Char in [Collections.Generic.List[Char]]$Line) {
+            ForEach ($Char in [Collections.Generic.List[Char]]$Line) {
 
                 # Don't trim on comment mark if it's part of a quoted string!
-				If     ($Char -eq '"') {$inQuotes = !$inQuotes}
+                If     ($Char -eq '"') {$inQuotes = !$inQuotes}
                 ElseIf ($Char -eq '#') {If (!$inQuotes) {Break}}
                 ElseIf ($Char -eq '/') {If ($Previous -eq '/' -And !$inQuotes) {$Clean = $Clean.SubString(0, $Clean.Length - 1); Break}}
 
-				$Clean   += $Char
+                $Clean   += $Char
                 $Previous = $Char
-			}
+            }
 
             $Clean = $Clean
-			$Trimmed.Add($Clean)
+            $Trimmed.Add($Clean)
 
-		}
+        }
 
         [String]$Content = $Trimmed -Join "`n" -Replace '\t+', ' '
 
@@ -555,14 +555,14 @@ Function Optimize-ModPackage {
 
         $File.Refresh()
 
-		[Int64]$NewSize  = $File.Length
-		[Int64]$DiffSize = $OrigSize - $NewSize
-		$TotalTrimmed   += $DiffSize
+        [Int64]$NewSize  = $File.Length
+        [Int64]$DiffSize = $OrigSize - $NewSize
+        $TotalTrimmed   += $DiffSize
 
         [Console]::CursorLeft = 0
-		Write-Host -ForegroundColor ("White", "Green")[$NewSize -lt $OrigSize] "$OutStr$NewSize ($DiffSize)"
+        Write-Host -ForegroundColor ("White", "Green")[$NewSize -lt $OrigSize] "$OutStr$NewSize ($DiffSize)"
 
-	}
+    }
 
     $Iteration++
 
