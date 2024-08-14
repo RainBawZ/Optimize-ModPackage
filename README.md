@@ -14,11 +14,13 @@ Optimizes a mod package by removing clutter.
 
 ## Syntax
 ```
-Optimize-ModPackage [[-Path] <DirectoryInfo>] [-ScrubExtensions <string[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
+Optimize-ModPackage [[-Path] <IO.DirectoryInfo>] [-ScrubExtensions <String[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
 
-Optimize-ModPackage [-SetPacker] <FileInfo>
+Optimize-ModPackage [-SetPacker] <IO.FileInfo>
 
-Optimize-ModPackage -ModPackage <FileInfo> [-PackerPath <FileInfo>] [-Root <DirectoryInfo>] [-BufferLimit <ushort>] [-Force] [-Repackage] [-NoCompression] [-NoCleanup] [-ScrubExtensions <string[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
+Optimize-ModPackage -TargetFiles <IO.FileInfo[]>
+
+Optimize-ModPackage -ModPackage <IO.FileInfo> [-PackerPath <IO.FileInfo>] [-Root <IO.DirectoryInfo>] [-BufferLimit <UInt16>] [-Force] [-Repackage] [-NoCompression] [-NoCleanup] [-ScrubExtensions <String[]>] [-NoScrub] [-KeepEmpty] [-NoUnitFix] [-NoAttribFix] [-KeepForeign] [-NoBinaryCheck] [-NoManifestFix]
 ```
 
 ## Parameters
@@ -28,7 +30,8 @@ Path to pre-extracted mod root directory.
 ```
 Required?                    false
 Position?                    0
-Default value                
+Alias
+Default value
 Accept pipeline input?       true (ByValue)
 Accept wildcard characters?  false
 ```
@@ -38,6 +41,7 @@ Sets a persistent path to the SCS Packer executable. Must be set per-session.
 ```
 Required?                    true
 Position?                    0
+Alias
 Default value                
 Accept pipeline input?       true (ByValue)
 Accept wildcard characters?  false
@@ -48,6 +52,7 @@ Path to the SCS Packer executable.
 ```
 Required?                    false
 Position?                    Named
+Alias                        Packer
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -58,6 +63,7 @@ The mod package to unpack.
 ```
 Required?                    true
 Position?                    Named
+Alias                        Mod, File
 Default value                
 Accept pipeline input?       true (ByValue)
 Accept wildcard characters?  false
@@ -68,6 +74,7 @@ Destination folder for unpacked files.
 ```
 Required?                    false
 Position?                    Named
+Alias                        
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -78,6 +85,7 @@ Disables file scrubbing.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -88,6 +96,7 @@ Retains empty subdirectories.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -98,6 +107,7 @@ Disables fixing file and folder attributes.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -108,6 +118,7 @@ Disables automatic fixes of detected problems in unit files.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -118,6 +129,7 @@ Retains foreign/invalid files.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -129,6 +141,7 @@ Note: Misidentification of binary files as plaintext may occur in rare circumsta
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -142,6 +155,7 @@ Disables mod manifest fixes, which include:
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -153,7 +167,8 @@ Note: Targeting .txt files is not recommended.
 ```
 Required?                    false
 Position?                    Named
-Default value                
+Alias
+Default value                @('.mat', '.sui', '.sii', '.guids', '.soundref')
 Accept pipeline input?       false
 Accept wildcard characters?  false
 ```
@@ -163,6 +178,7 @@ Limits I/O buffers during file unpacking.
 ```
 Required?                    false
 Position?                    Named
+Alias                        Lim
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -173,6 +189,7 @@ Forces overwriting of files in the destination folder.
 ```
 Required?                    false
 Position?                    Named
+Alias                        F
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -183,6 +200,7 @@ Repackages the mod into a HashFS v2 package after processing.
 ```
 Required?                    false
 Position?                    Named
+Alias                        Repack
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -193,6 +211,7 @@ Disables compression during repackaging (results in a larger file but faster pro
 ```
 Required?                    false
 Position?                    Named
+Alias                        NoComp
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
@@ -203,6 +222,7 @@ Retains unpacked files after repackaging.
 ```
 Required?                    false
 Position?                    Named
+Alias
 Default value                
 Accept pipeline input?       false
 Accept wildcard characters?  false
