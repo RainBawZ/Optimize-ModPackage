@@ -67,6 +67,9 @@ Function Optimize-ModPackage {
     .PARAMETER NoCleanup
         Retains unpacked files after repackaging.
 
+    .PARAMETER Version
+        Displays the current function version.
+
     .INPUTS
         System.IO.FileInfo
         System.IO.DirectoryInfo
@@ -74,7 +77,7 @@ Function Optimize-ModPackage {
 
     Param (
         [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'SetPacker', Position = 0)]
-        # Valid if --- 1: Has 'Archive' attribute. 2: Exists. 3: Extension equals '.exe'. 4: Header equals 'MZ'
+        # Valid if exists, has 'Archive' attribute, extension is '.exe' and first two bytes equal 'MZ'
         [ValidateScript({
             [Byte[]]$fHead = [Byte[]]::New(2)
             If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {
@@ -86,25 +89,57 @@ Function Optimize-ModPackage {
         })]
         [IO.FileInfo]$SetPacker,
 
+        [Parameter(Mandatory, ParameterSetName = 'Files')]
+        [ValidateScript({
+            [String[]]$ValidHeaders = @(
+                '53435323', # SCS package   - 'SCS#'   (Bytes: 083, 067, 083, 035)
+                '504B0304'  # PKZip archive - 'PK\3\4' (Bytes: 080, 075, 003, 004)
+            )
+            [UInt16]$Validated = 0
+            ForEach ($File in $_) {
+                If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
+                    [Byte[]]$fHeadBytes = [Byte[]]::New(4)
+                    [String]$fHeadStr   = ''
+                    Try {
+                        [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
+                        [Void]$Stream.Read($fHeadBytes, 0, 4)
+                        $Stream.Close()
+                        ForEach ($Byte in $fHeadBytes) {$fHeadStr += ([UInt16]$Byte).ToString('X2')}
+                        If ($fHeadStr -In $ValidHeaders) {$Validated++}
+                    } Catch {}
+                }
+            }
+            $Validated -eq $_.Count
+        })]
+        [IO.FileInfo[]]$TargetFiles,
+
         [Parameter(ValueFromPipeline, ParameterSetName = 'Path', Position = 0)]
-        # Valid if --- Has 'Directory' attribute. 2: Exists
-        [ValidateScript({[Bool]($_.Attributes.Value__ -bAnd 16) -And $_.Exists})]
+        [ValidateScript({[Bool]($_.Attributes.Value__ -bAnd 16) -And $_.Exists})] # Valid if exists and has 'Directory' attribute.
         [IO.DirectoryInfo]$Path,
 
         [Parameter(ParameterSetName = 'Extract')]
         [Alias('Packer')]
         [IO.FileInfo]$PackerPath,
 
-        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'Extract')]
-        # Valid if --- 1: Has 'Archive' attribute. 2: Exists. 3: Header equals 'SCS#'
+        [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'Extract')] # Valid if exists, has 'Archive' attribute and first four bytes equal 'SCS#' or 'PK\3\4'
         [ValidateScript({
-            [Byte[]]$fHead = [Byte[]]::New(4)
             If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
-                [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
-                [Void]$Stream.Read($fHead, 0, 4)
-                $Stream.Close()
+                [Byte[]]$fHeadBytes     = [Byte[]]::New(4)
+                [String]$fHeadStr       = ''
+                [String[]]$ValidHeaders = @(
+                    '53435323', # SCS package   - 'SCS#'   (Bytes: 083, 067, 083, 035)
+                    '504B0304'  # PKZip archive - 'PK\3\4' (Bytes: 080, 075, 003, 004)
+                )
+                Try {
+                    [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
+                    [Void]$Stream.Read($fHeadBytes, 0, 4)
+                    $Stream.Close()
+                    ForEach ($Byte in $fHeadBytes) {$fHeadStr += ([UInt16]$Byte).ToString('X2')}
+                }
+                Catch {$False}
             }
-            [Char[]]$fHead -Join '' -ceq 'SCS#'
+            Else {$False}
+            $fHeadStr -In $ValidHeaders 
         })]
         [Alias('Mod', 'File')]
         [IO.FileInfo]$ModPackage,
@@ -133,37 +168,49 @@ Function Optimize-ModPackage {
 
         # File extensions to scrub (Files containing binary data will be skipped by default regardless of extensions entered. Use -NoBinaryCheck to force.)
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [ValidateScript({ForEach ($Item in $_) {If ($Item -NotMatch '^\.[a-z0-9]+$') {$False; Break}} $True})]
+        [Alias('Exts')]
         [String[]]$ScrubExtensions = @('.mat', '.sui', '.sii', '.guids', '.soundref'),
         
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [Switch]$NoScrub,       # Disables file scrubbing
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [Switch]$KeepEmpty,     # Disables empty subdirectory deletion
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
-        [Switch]$NoUnitFix,
+        [Switch]$NoUnitFix,     # Disables unit fixing
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [Switch]$NoAttribFix,   # Disables attribute fixing
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [Switch]$KeepForeign,   # Disables foreign file deletion
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
         [Switch]$NoBinaryCheck, # Disables safeguard against binary data scrubbing
 
         [Parameter(ParameterSetName = 'Path')]
+        [Parameter(ParameterSetName = 'Files')]
         [Parameter(ParameterSetName = 'Extract')]
-        [Switch]$NoManifestFix  # Disables mod manifest fixing
+        [Switch]$NoManifestFix,  # Disables mod manifest fixing
+
+        [Parameter(ParameterSetName = 'Version')]
+        [Switch]$Version
 
     )
 
@@ -177,6 +224,13 @@ Function Optimize-ModPackage {
         Write-Host -ForegroundColor Green "`n SCS Packer set to '$($GLOBAL:PackerPath.FullName)'`n New behavior: -PackerPath now overrides set value if provided."
         Return
     }
+
+    If ($PSCmdlet.ParameterSetName -eq 'Files') {
+        #TODO: Work in progress
+        Return
+    }
+
+    [Version]$Version = 0.1.3.0
 
     If ($NoCompression.IsPresent -And !$Repackage.IsPresent) {
         Write-Host -NoNewline ' '
@@ -195,6 +249,8 @@ Function Optimize-ModPackage {
         If ($Host.UI.RawUI.ReadKey('NoEcho, IncludeKeyDown').VirtualKeyCode -ne 89) {Throw 'Aborted by user.'}
     }
 
+    If ($PSCmdlet.ParameterSetName -eq 'Version') {Return $Version}
+
     # Remove any potential duplicates from target scrub extensions
     $ScrubExtensions = $ScrubExtensions | Select-Object -Unique
 
@@ -212,11 +268,11 @@ Function Optimize-ModPackage {
         '.dmd', '.cfg', '.thumb',
         '.ogv'
     )
+
     [String[]]$ProtectedFiles = @(
         'material.db'
     )
-        
-    # Unused for now
+    
     [String[]]$KnownRootItems = @(
         'ui',      'dlc',     'map',
         'unit',    'font',    'asset',
