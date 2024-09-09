@@ -69,6 +69,17 @@ Accept pipeline input?       true (ByValue)
 Accept wildcard characters?  false
 ```
 
+### TargetFiles <IO.FileInfo[]>
+The mod packages to process. (Does nothing for the time being - Work in progress)
+```
+Required?                    true
+Position?                    Named
+Alias                        
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
+
 ### Root <IO.DirectoryInfo>
 Destination folder for unpacked files.
 ```
@@ -219,6 +230,17 @@ Accept wildcard characters?  false
 
 ### NoCleanup <>
 Retains unpacked files after repackaging.
+```
+Required?                    false
+Position?                    Named
+Alias
+Default value                
+Accept pipeline input?       false
+Accept wildcard characters?  false
+```
+
+### Version <>
+Returns the current version of the function.
 ```
 Required?                    false
 Position?                    Named
