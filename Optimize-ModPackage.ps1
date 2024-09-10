@@ -1,3 +1,38 @@
+Function Test-PackageProperties {
+    [CmdletBinding()]
+
+    Param (
+        [Parameter(Mandatory, Position = 0)]
+        [IO.FileInfo]$TestTarget,
+
+        [Parameter(Position = 1)]
+        [ValidatePattern('^([\dA-F]{2})+$')]
+        [String[]]$HexHeaders = @(
+            '53435323', # SCS package   - 'SCS#'   (Bytes: 83, 67, 83, 35)
+            '504B0304'  # PKZip archive - 'PK\3\4' (Bytes: 80, 75, 03, 04)
+        ),
+
+        [UInt64]$Offset = 0
+    )
+
+    Trap {Return $False}
+
+    [UInt16]$ChunkSize = ($HexHeaders | Sort-Object Length)[-1].Length / 2
+
+    [Byte[]]$HeaderBytes = [Byte[]]::New($ChunkSize)
+    [String]$HeaderHex   = ''
+
+    [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
+    [Void]$Stream.Read($HeaderBytes, $Offset, $ChunkSize)
+    $Stream.Close()
+
+    ForEach ($Byte in $HeaderBytes) {$HeaderHex += ([UInt16]$Byte).ToString('X2')}
+
+    ForEach ($Hex in $HexHeaders) {If ($HeaderHex.Substring(0, $Hex.Length - 1) -eq $Hex) {Return $True}}
+
+    Return $False
+}
+
 Function Optimize-ModPackage {
 
     #Requires -Version 7
@@ -79,34 +114,17 @@ Function Optimize-ModPackage {
         [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'SetPacker', Position = 0)]
         # Valid if exists, has 'Archive' attribute, extension is '.exe' and first two bytes equal 'MZ'
         [ValidateScript({
-            [Byte[]]$fHead = [Byte[]]::New(2)
-            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {
-                [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
-                [Void]$Stream.Read($fHead, 0, 2)
-                $Stream.Close()
-            }
-            [Char[]]$fHead -Join '' -ceq 'MZ'
+            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {Test-PackageProperties $_ -HexHeaders '4D5A'}
+            Else {$False}
         })]
         [IO.FileInfo]$SetPacker,
 
         [Parameter(Mandatory, ParameterSetName = 'Files')]
         [ValidateScript({
-            [String[]]$ValidHeaders = @(
-                '53435323', # SCS package   - 'SCS#'   (Bytes: 083, 067, 083, 035)
-                '504B0304'  # PKZip archive - 'PK\3\4' (Bytes: 080, 075, 003, 004)
-            )
             [UInt16]$Validated = 0
             ForEach ($File in $_) {
-                If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
-                    [Byte[]]$fHeadBytes = [Byte[]]::New(4)
-                    [String]$fHeadStr   = ''
-                    Try {
-                        [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
-                        [Void]$Stream.Read($fHeadBytes, 0, 4)
-                        $Stream.Close()
-                        ForEach ($Byte in $fHeadBytes) {$fHeadStr += ([UInt16]$Byte).ToString('X2')}
-                        If ($fHeadStr -In $ValidHeaders) {$Validated++}
-                    } Catch {}
+                If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.scs') {
+                    If (Test-PackageProperties $File) {$Validated++}
                 }
             }
             $Validated -eq $_.Count
@@ -118,29 +136,15 @@ Function Optimize-ModPackage {
         [IO.DirectoryInfo]$Path,
 
         [Parameter(ParameterSetName = 'Extract')]
+        [ValidateScript({
+            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {Test-PackageProperties $_ -HexHeaders '4D5A'}
+            Else {$False}
+        })]
         [Alias('Packer')]
         [IO.FileInfo]$PackerPath,
 
         [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'Extract')] # Valid if exists, has 'Archive' attribute and first four bytes equal 'SCS#' or 'PK\3\4'
-        [ValidateScript({
-            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
-                [Byte[]]$fHeadBytes     = [Byte[]]::New(4)
-                [String]$fHeadStr       = ''
-                [String[]]$ValidHeaders = @(
-                    '53435323', # SCS package   - 'SCS#'   (Bytes: 083, 067, 083, 035)
-                    '504B0304'  # PKZip archive - 'PK\3\4' (Bytes: 080, 075, 003, 004)
-                )
-                Try {
-                    [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
-                    [Void]$Stream.Read($fHeadBytes, 0, 4)
-                    $Stream.Close()
-                    ForEach ($Byte in $fHeadBytes) {$fHeadStr += ([UInt16]$Byte).ToString('X2')}
-                }
-                Catch {$False}
-            }
-            Else {$False}
-            $fHeadStr -In $ValidHeaders 
-        })]
+        [ValidateScript({Test-PackageProperties $_})]
         [Alias('Mod', 'File')]
         [IO.FileInfo]$ModPackage,
 
@@ -230,22 +234,22 @@ Function Optimize-ModPackage {
         Return
     }
 
-    [Version]$Version = 0.1.3.0
+    [Version]$Version = 0.1.3.1
 
     If ($NoCompression.IsPresent -And !$Repackage.IsPresent) {
         Write-Host -NoNewline ' '
-        Write-Warning -Message "Ignored parameter '-NoCompression': Not applicable."
+        Write-Warning 'Ignored parameter ''-NoCompression'': Not applicable.'
     }
 
     If ($NoCleanup.IsPresent -And !$Repackage.IsPresent) {
         Write-Host -NoNewline ' '
-        Write-Warning -Message "Ignored parameter '-NoCleanup': Not applicable."
+        Write-Warning 'Ignored parameter ''-NoCleanup'': Not applicable.'
     }
 
     # Show warning if user has entered .txt files for scrubbing
     If ('.txt' -In $ScrubExtensions) {
         Write-Host -NoNewline ' '
-        Write-Warning -Message 'Scrubbing .txt files is not recommended as it may impact readability and structure. Press ''Y'' to continue.'
+        Write-Warning 'Scrubbing .txt files is not recommended as it may impact readability and structure. Press ''Y'' to continue.'
         If ($Host.UI.RawUI.ReadKey('NoEcho, IncludeKeyDown').VirtualKeyCode -ne 89) {Throw 'Aborted by user.'}
     }
 
@@ -440,9 +444,7 @@ Function Optimize-ModPackage {
             }
         }
 
-        If ($ManifestData -ne $_ManifestData -And !$NoManifestFix.IsPresent) {
-            Set-Content -Path "$($Path.Fullname)\manifest.sii" -Value $ManifestData -NoNewline -Force
-        }
+        If ($ManifestData -ne $_ManifestData -And !$NoManifestFix.IsPresent) {Set-Content -Path "$($Path.Fullname)\manifest.sii" -Value $ManifestData -NoNewline -Force}
 
         Write-Host -NoNewline "`n Package name:      "
         Write-Host -ForegroundColor DarkCyan $PackageName
@@ -451,9 +453,7 @@ Function Optimize-ModPackage {
         Write-Host -NoNewline ' Package version:   '
         Write-Host -ForegroundColor DarkCyan "v$PackageVersion`n"
     }
-    Else {
-        Write-Host -ForegroundColor Yellow ' Missing mod manifest (manifest.sii).'
-    }
+    Else {Write-Host -ForegroundColor Yellow ' Missing mod manifest (manifest.sii).'}
 
     Write-Host -NoNewline ' Building file list... '
     [IO.FileInfo[]]$Files = Get-ChildItem @GCIParams -File
@@ -586,11 +586,10 @@ Function Optimize-ModPackage {
                 Else {$FixedUnits += "'$Relative' ($($InvalidSep.Index)+$($InvalidSep.Length)) : Invalid directory separator"}
             }
         }
-
-        $Content = ($Content -Split "`n" | `
-            Where-Object   {![String]::IsNullOrWhiteSpace($_)} | `
-            ForEach-Object {$_.TrimStart().TrimEnd()}
-        ) -Join "`n"
+        
+        [String[]]$ContentLines = Where-Object {![String]::IsNullOrWhiteSpace($_)} -InputObject ($Content -Split "`n")
+        For ([UInt64]$Index = 0; $Index -lt $ContentLines.Count; $Index++) {$ContentLines[$Index] = $ContentLines[$Index].TrimStart().TrimEnd()}
+        $Content = $ContentLines -Join "`n"
 
         If ($File.Extension -In ('.sui', '.sii')) {
             $Content = [Regex]::Replace($Content, '(?<!@include "[\w\.\/]+")\r?\n(?!@include "[\w\.\/]+")', ' ')
@@ -599,7 +598,7 @@ Function Optimize-ModPackage {
             $Content = [Regex]::Replace($Content, '\)(?=[\w\[\]]+:)', ') ')
             
             # Trim remaining whitespaces
-            $Content = [Regex]::Replace($Content, '(?<=[\w\]]:)\s*(?=".*)', '')
+            $Content = [Regex]::Replace($Content, '(?<=[\w[\]]:)\s*(?=".*)', '')
             $Content = [Regex]::Replace($Content, '(?<=[\d"\]})])[ \t]*(?=\}+)', '')
         }
 
@@ -607,7 +606,7 @@ Function Optimize-ModPackage {
             [Byte[]]$ContentBytes = [Text.Encoding]::UTF8.GetBytes($Content)
             [IO.File]::WriteAllBytes($File.FullName, $ContentBytes)
         }
-        Else {Set-Content -Value $Content -Path $File.FullName -Force -NoNewline -Encoding UTF8}
+        Else {Set-Content $File.FullName $Content -Force -NoNewline -Encoding UTF8}
 
         $File.Refresh()
 
@@ -668,6 +667,7 @@ Function Optimize-ModPackage {
                 Write-Host -ForegroundColor Green " Fixed attributes for '$Subdir'"
             }
         }
+        If ($DeletedDirs.Count + $FixedAttribs.Count -eq 0) {Write-Host -ForegroundColor Green ' No directory issues detected.'}
         Write-Host ''
     }
 
@@ -737,7 +737,7 @@ Function Optimize-ModPackage {
     }
 
     If ($FailedUnitFixes.Count -gt 0) {
-        " Unfixed unit issues:"
+        Write-Host " Unfixed unit issues:"
         ForEach ($Item in $FailedUnitFixes) {Write-Host -ForegroundColor Red "    $Item"}
     }
 
