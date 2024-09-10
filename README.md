@@ -1,6 +1,8 @@
 # Optimize-ModPackage
 A PowerShell function for optimizing, repairing and repackaging SCS mod packages in raw/extracted, ZipFS (soon™) and HashFS formats.
 
+This is a standalone function for now until I wrap it in a module.
+
 ### This is a work in progress - Here be bugs and critters, so make sure to make a backup before processing a mod!
 
 Requires PowerShell 7.0 or higher.
