@@ -17,18 +17,18 @@ Function Test-PackageProperties {
 
     Trap {Return $False}
 
-    [UInt16]$ChunkSize = ($HexHeaders | Sort-Object Length)[-1].Length / 2
+    [UInt16]$ChunkSize = 4
 
     [Byte[]]$HeaderBytes = [Byte[]]::New($ChunkSize)
     [String]$HeaderHex   = ''
 
-    [IO.FileStream]$Stream = [IO.File]::OpenRead($_.FullName)
+    [IO.FileStream]$Stream = [IO.File]::OpenRead($TestTarget.FullName)
     [Void]$Stream.Read($HeaderBytes, $Offset, $ChunkSize)
     $Stream.Close()
 
     ForEach ($Byte in $HeaderBytes) {$HeaderHex += ([UInt16]$Byte).ToString('X2')}
 
-    ForEach ($Hex in $HexHeaders) {If ($HeaderHex.Substring(0, $Hex.Length - 1) -eq $Hex) {Return $True}}
+    ForEach ($Hex in $HexHeaders) {If ($HeaderHex -eq $Hex) {Return $True}}
 
     Return $False
 }
@@ -112,10 +112,13 @@ Function Optimize-ModPackage {
 
     Param (
         [Parameter(Mandatory, ValueFromPipeline, ParameterSetName = 'SetPacker', Position = 0)]
-        # Valid if exists, has 'Archive' attribute, extension is '.exe' and first two bytes equal 'MZ'
+        # Valid if exists, has 'Archive' attribute, extension is '.exe' and first four bytes equal '4D 5A 90 00'
         [ValidateScript({
-            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {Test-PackageProperties $_ -HexHeaders '4D5A'}
-            Else {$False}
+            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
+                If     ($_.Extension -eq '.exe')                 {Test-PackageProperties $_ -HexHeaders '4D5A9000'}
+                ElseIf ($_.Extension -In '.bat', '.cmd', '.ps1') {$True}
+                Else                                             {$False}
+            } Else {$False}
         })]
         [IO.FileInfo]$SetPacker,
 
@@ -123,7 +126,7 @@ Function Optimize-ModPackage {
         [ValidateScript({
             [UInt16]$Validated = 0
             ForEach ($File in $_) {
-                If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.scs') {
+                If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -In '.scs', '.zip') {
                     If (Test-PackageProperties $File) {$Validated++}
                 }
             }
@@ -137,8 +140,11 @@ Function Optimize-ModPackage {
 
         [Parameter(ParameterSetName = 'Extract')]
         [ValidateScript({
-            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists -And $_.Extension -eq '.exe') {Test-PackageProperties $_ -HexHeaders '4D5A'}
-            Else {$False}
+            If ([Bool]($_.Attributes.Value__ -bAnd 32) -And $_.Exists) {
+                If     ($_.Extension -eq '.exe')                 {Test-PackageProperties $_ -HexHeaders '4D5A9000'}
+                ElseIf ($_.Extension -In '.bat', '.cmd', '.ps1') {$True}
+                Else                                             {$False}
+            } Else {$False}
         })]
         [Alias('Packer')]
         [IO.FileInfo]$PackerPath,
@@ -220,12 +226,9 @@ Function Optimize-ModPackage {
 
     If ($PSCmdlet.ParameterSetName -eq 'SetPacker') {
 
-        If (!$SetPacker.Exists) {Throw [IO.IOException]::New("The specified SCS Packer path '$($SetPacker.FullName)' does not exist.")}
-        ElseIf ($SetPacker.Extension -ne '.exe') {Throw [IO.IOException]::New("The specified SCS Packer path '$($SetPacker.FullName)' must be an executable.")}
+        [String]$GLOBAL:PackerPath = $SetPacker.FullName
 
-        [String]$GLOBAL:PackerPath = ([IO.FileInfo]$SetPacker).FullName
-
-        Write-Host -ForegroundColor Green "`n SCS Packer set to '$($GLOBAL:PackerPath.FullName)'`n New behavior: -PackerPath now overrides set value if provided."
+        Write-Host -ForegroundColor Green "`n SCS Packer set to '$($GLOBAL:PackerPath)'`n New behavior: -PackerPath now overrides set value if provided."
         Return
     }
 
@@ -234,7 +237,7 @@ Function Optimize-ModPackage {
         Return
     }
 
-    [Version]$Version = 0.1.3.1
+    [Version]$Version = 0.1.3.2
 
     If ($NoCompression.IsPresent -And !$Repackage.IsPresent) {
         Write-Host -NoNewline ' '
@@ -299,19 +302,23 @@ Function Optimize-ModPackage {
     #### EXTRACT MOD PACKAGE ####
     If ($PSCmdlet.ParameterSetName -eq 'Extract') {
 
-        If ([String]::IsNullOrWhiteSpace($PackerPath) -Or 'PackerPath' -NotIn $PSBoundParameters.Keys) {
-            If ([String]::IsNullOrWhiteSpace($GLOBAL:PackerPath)) {
-                Throw [ArgumentException]::New('No packer executable is defined. Use -SetPacker <Path> to allow -PackerPath omission.')
-            }
-            [IO.FileInfo]$PackerPath = $GLOBAL:PackerPath
+        If (Test-PackageProperties $ModPackage -HexHeaders '504B0304') {
+            Write-Host "`n The provided package is of type ZipFS - Ignoring packer executable."
+            [Bool]$IsZipFS = $True
         }
+        Else {
+            [Bool]$IsZipFS = $False
+            If ([String]::IsNullOrWhiteSpace($PackerPath) -Or 'PackerPath' -NotIn $PSBoundParameters.Keys) {
+                If ([String]::IsNullOrWhiteSpace($GLOBAL:PackerPath)) {
+                    Throw [ArgumentException]::New('No packer executable is defined. Use -SetPacker <Path> to allow -PackerPath omission.')
+                }
+                [IO.FileInfo]$PackerPath = $GLOBAL:PackerPath
+            }
 
-        $PackerPath.Refresh()
+            $PackerPath.Refresh()
 
-        If (!$PackerPath.Exists) {Throw [IO.IOException]::New("The specified SCS Packer path '$($PackerPath.FullName)' $(('no longer exists', 'does not exist')['PackerPath' -In $PSBoundParameters.Keys]).")}
-        ElseIf ($PackerPath.Extension -ne '.exe') {Throw [IO.IOException]::New("The specified SCS Packer path '$($PackerPath.FullName)' must be an executable.")}
-
-        If ([String]::IsNullOrWhiteSpace($PackerPath) -Or 'PackerPath' -NotIn $PSBoundParameters.Keys) {Write-Host "`n Using Packer '$($PackerPath.Name)'."}
+            If ([String]::IsNullOrWhiteSpace($PackerPath) -Or 'PackerPath' -NotIn $PSBoundParameters.Keys) {Write-Host "`n Using Packer '$($PackerPath.Name)'."}
+        }
 
         If (!$ModPackage.Exists) {Throw [IO.IOException]::New("The specified mod package '$($ModPackage.FullName)' does not exist.")}
 
@@ -327,19 +334,30 @@ Function Optimize-ModPackage {
 
         If ($Repackage.IsPresent) {[UInt64]$PackageStartSize = $ModPackage.Length}
 
-        [String]$PackerCommand = ". `"$($PackerPath.FullName)`" extract `"$($ModPackage.Fullname)`" -root `"$($Root.FullName)`""
-        If ($BufferLimit) {$PackerCommand += " -io-buffers-size `"$BufferLimit`""}
+        If (!$IsZipFS) {
 
-        Write-Host -NoNewline " Extracting '$($ModPackage.Name)' using $($PackerPath.BaseName)... "
+            [String]$PackerCommand = ". `"$($PackerPath.FullName)`" extract `"$($ModPackage.Fullname)`" -root `"$($Root.FullName)`""
+            If ($BufferLimit) {$PackerCommand += " -io-buffers-size `"$BufferLimit`""}
 
-        Try {
-            [Void](Invoke-Expression $PackerCommand)
-            If ($LASTEXITCODE -ne 0) {Throw 'Failed to extract package.'}
+            Write-Host -NoNewline " Extracting '$($ModPackage.Name)' using $($PackerPath.BaseName)... "
+
+            Try {
+                [Void](Invoke-Expression $PackerCommand)
+                If ($LASTEXITCODE -ne 0) {Throw 'Failed to extract package.'}
+            }
+            Catch {
+                Write-Host ''
+                Throw $_.Exception.Message
+            }
+
         }
-        Catch {
-            Write-Host ''
-            Throw $_.Exception.Message
+        Else {
+            [String]$ModPackageZip = "$($ModPackage.BaseName).zip"
+            Rename-Item $ModPackage.FullName $ModPackageZip
+            Expand-Archive $ModPackageZip $Root.FullName
         }
+
+
         $Path = $Root
         Write-Host -ForegroundColor Green 'Success.'
         Write-Host "`n Using path '$($Root.Name)'."
@@ -520,12 +538,11 @@ Function Optimize-ModPackage {
         $RawContent = [Regex]::Replace($RawContent, '^\xEF\xBB\xBF', '')
         $RawContent = [Regex]::Replace($RawContent, '\/\*[\s\S]*\*\/', '')
 
-        $RawContent = ($RawContent -Split "`n" | `
-            Where-Object   {![String]::IsNullOrWhiteSpace($_) -And $_ -NotMatch '^\s*(?:#|\/\/)'} | `
-            ForEach-Object {$_.TrimStart().TrimEnd()}
-        ) -Join "`n"
+        [String[]]$RawLines = Where-Object {![String]::IsNullOrWhiteSpace($_) -And $_ -NotMatch '^\s*(?:#|\/\/)'} -InputObject ($RawContent -Split "`n")
+        For ([UInt64]$Index = 0; $Index -lt $RawLines.Count; $Index++) {$RawLines[$Index] = $RawLines[$Index].TrimStart().TrimEnd()}
+        $RawContent = $RawLines -Join "`n"
 
-        $RawContent = [Regex]::Replace($RawContent, '(?m)(?<!:".+)[ \t]*([\:,{}();])[ \t]*(?!"$?)', '$1')
+        $RawContent = [Regex]::Replace($RawContent, '(?m)(?<!:[ \t]*".+)[ \t]*([\:,{}();])[ \t]*(?!"$?)', '$1')
         $RawContent = [Regex]::Replace($RawContent, '(?m)(?<=^\s*\})\s*(?=^\}$)', '')
         $RawContent = [Regex]::Replace($RawContent, '(?i)(?m)(?<=^(?:\w+:\.?[\w\.]+)|(?:SiiNunit))\s*(?=\{)', '')
 
@@ -591,15 +608,18 @@ Function Optimize-ModPackage {
         For ([UInt64]$Index = 0; $Index -lt $ContentLines.Count; $Index++) {$ContentLines[$Index] = $ContentLines[$Index].TrimStart().TrimEnd()}
         $Content = $ContentLines -Join "`n"
 
-        If ($File.Extension -In ('.sui', '.sii')) {
+        If ($File.Extension -In ('.sui', '.sii', '.mat')) {
             $Content = [Regex]::Replace($Content, '(?<!@include "[\w\.\/]+")\r?\n(?!@include "[\w\.\/]+")', ' ')
             $Content = [Regex]::Replace($Content, '\{ ', '{')
             $Content = [Regex]::Replace($Content, ' (\} |\}$)', '$1')
             $Content = [Regex]::Replace($Content, '\)(?=[\w\[\]]+:)', ') ')
             
             # Trim remaining whitespaces
-            $Content = [Regex]::Replace($Content, '(?<=[\w[\]]:)\s*(?=".*)', '')
+            $Content = [Regex]::Replace($Content, '(?<=[\w[\]]+:)[ \t]*(?=".*)', '')
             $Content = [Regex]::Replace($Content, '(?<=[\d"\]})])[ \t]*(?=\}+)', '')
+            $Content = [Regex]::Replace($Content, '(?<=:"[^"]*")[ \t]{2,}(?=\w)', ' ')
+            $Content = [Regex]::Replace($Content, '(?<!:[ \t]*){[ \t]+(?=\w)', '{')
+            $Content = [Regex]::Replace($Content, '[ \t]+(?=}+)', '')
         }
 
         If ($WriteBytes) {
