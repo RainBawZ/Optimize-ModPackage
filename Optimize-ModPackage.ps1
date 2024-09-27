@@ -237,7 +237,7 @@ Function Optimize-ModPackage {
         Return
     }
 
-    [Version]$Version = 0.1.3.2
+    [Version]$Version = 0.1.3.3
 
     If ($NoCompression.IsPresent -And !$Repackage.IsPresent) {
         Write-Host -NoNewline ' '
@@ -535,48 +535,56 @@ Function Optimize-ModPackage {
         # Use regular Get-Content (Slower) if ReadAllBytes() fails
         Catch {[String]$RawContent = Get-Content $File.FullName -Raw -Encoding UTF8}
 
-        $RawContent = [Regex]::Replace($RawContent, '^\xEF\xBB\xBF', '')
-        $RawContent = [Regex]::Replace($RawContent, '\/\*[\s\S]*\*\/', '')
+        # Skip actual scrubbing if switch is provided.
+        If ($NoScrub.IsPresent) {
+            [String]$Content = $RawContent
+        }
+        Else {
 
-        [String[]]$RawLines = Where-Object {![String]::IsNullOrWhiteSpace($_) -And $_ -NotMatch '^\s*(?:#|\/\/)'} -InputObject ($RawContent -Split "`n")
-        For ([UInt64]$Index = 0; $Index -lt $RawLines.Count; $Index++) {$RawLines[$Index] = $RawLines[$Index].TrimStart().TrimEnd()}
-        $RawContent = $RawLines -Join "`n"
+            $RawContent = [Regex]::Replace($RawContent, '^\xEF\xBB\xBF', '') # Remove BOM
+            $RawContent = [Regex]::Replace($RawContent, '\/\*[\s\S]*\*\/', '') # Remove multiline comments
 
-        $RawContent = [Regex]::Replace($RawContent, '(?m)(?<!:[ \t]*".+)[ \t]*([\:,{}();])[ \t]*(?!"$?)', '$1')
-        $RawContent = [Regex]::Replace($RawContent, '(?m)(?<=^\s*\})\s*(?=^\}$)', '')
-        $RawContent = [Regex]::Replace($RawContent, '(?i)(?m)(?<=^(?:\w+:\.?[\w\.]+)|(?:SiiNunit))\s*(?=\{)', '')
+            # Remove most lines not containing unit data, E.g. lines that are empty or pure whitespace
+            [String[]]$RawLines = Where-Object {![String]::IsNullOrWhiteSpace($_) -And $_ -NotMatch '^\s*(?:#|\/\/)'} -InputObject ($RawContent -Split "`n")
+            For ([UInt64]$Index = 0; $Index -lt $RawLines.Count; $Index++) {$RawLines[$Index] = $RawLines[$Index].TrimStart().TrimEnd()}
+            $RawContent = $RawLines -Join "`n"
 
-        [Collections.Generic.List[String]]$Lines   = $RawContent -Split "`n"
-        [Collections.Generic.List[String]]$Trimmed = @()
+            $RawContent = [Regex]::Replace($RawContent, '(?m)(?<!:[ \t]*".+)[ \t]*([\:,{}();])[ \t]*(?!"$?)', '$1')
+            $RawContent = [Regex]::Replace($RawContent, '(?m)(?<=^\s*\})\s*(?=^\}$)', '')
+            $RawContent = [Regex]::Replace($RawContent, '(?i)(?m)(?<=^(?:\w+:\.?[\w\.]+)|(?:SiiNunit))\s*(?=\{)', '')
 
-        #### Scrub all unnecessary whitespace and comments ####
+            [Collections.Generic.List[String]]$Lines   = $RawContent -Split "`n"
+            [Collections.Generic.List[String]]$Trimmed = @()
 
-        ForEach ($Line in $Lines) {
+            #### Scrub all unnecessary whitespace and comments ####
 
-            [String]$Clean  = ''
-            [Char]$Previous = $Null
-            [Bool]$inQuotes = $False
+            ForEach ($Line in $Lines) {
 
-            ForEach ($Char in [Collections.Generic.List[Char]]$Line) {
+                [String]$Clean  = ''
+                [Char]$Previous = $Null
+                [Bool]$inQuotes = $False
 
-                # Don't trim on comment mark if it's part of a quoted string!
-                If     ($Char -eq '"') {$inQuotes = !$inQuotes}
-                ElseIf ($Char -eq '#') {If (!$inQuotes) {Break}}
-                ElseIf ($Char -eq '/') {If ($Previous -eq '/' -And !$inQuotes) {$Clean = $Clean.SubString(0, $Clean.Length - 1); Break}}
+                ForEach ($Char in [Collections.Generic.List[Char]]$Line) {
 
-                $Clean   += $Char
-                $Previous = $Char
+                    # Don't trim on comment mark if it's part of a quoted string!
+                    If     ($Char -eq '"') {$inQuotes = !$inQuotes}
+                    ElseIf ($Char -eq '#') {If (!$inQuotes) {Break}}
+                    ElseIf ($Char -eq '/') {If ($Previous -eq '/' -And !$inQuotes) {$Clean = $Clean.SubString(0, $Clean.Length - 1); Break}}
+
+                    $Clean   += $Char
+                    $Previous = $Char
+                }
+
+                $Clean = $Clean
+                $Trimmed.Add($Clean)
+
             }
 
-            $Clean = $Clean
-            $Trimmed.Add($Clean)
+            [String]$Content = $Trimmed -Join "`n" -Replace '\t+', ' '
 
+            # Convert line endings
+            $Content = [Regex]::Replace($Content, '\r\n|\r|\n', "`n")
         }
-
-        [String]$Content = $Trimmed -Join "`n" -Replace '\t+', ' '
-
-        # Convert line endings
-        $Content = [Regex]::Replace($Content, '\r\n|\r|\n', "`n")
 
         # Misplaced SII preprocessor directives
         ForEach ($Misplaced in [Regex]::Matches($Content, '(?<!\n)@include "\/*[\w\.]+(?:\/+[\w\.]+)*\.[a-z]+"(?!\n)')) {
@@ -604,38 +612,42 @@ Function Optimize-ModPackage {
             }
         }
         
-        [String[]]$ContentLines = Where-Object {![String]::IsNullOrWhiteSpace($_)} -InputObject ($Content -Split "`n")
-        For ([UInt64]$Index = 0; $Index -lt $ContentLines.Count; $Index++) {$ContentLines[$Index] = $ContentLines[$Index].TrimStart().TrimEnd()}
-        $Content = $ContentLines -Join "`n"
+        If (!$NoScrub.IsPresent) {
 
-        If ($File.Extension -In ('.sui', '.sii', '.mat')) {
-            $Content = [Regex]::Replace($Content, '(?<!@include "[\w\.\/]+")\r?\n(?!@include "[\w\.\/]+")', ' ')
-            $Content = [Regex]::Replace($Content, '\{ ', '{')
-            $Content = [Regex]::Replace($Content, ' (\} |\}$)', '$1')
-            $Content = [Regex]::Replace($Content, '\)(?=[\w\[\]]+:)', ') ')
+            # Remove lines that are empty or pure whitespace
+            [String[]]$ContentLines = Where-Object {![String]::IsNullOrWhiteSpace($_)} -InputObject ($Content -Split "`n")
+            For ([UInt64]$Index = 0; $Index -lt $ContentLines.Count; $Index++) {$ContentLines[$Index] = $ContentLines[$Index].TrimStart().TrimEnd()}
+            $Content = $ContentLines -Join "`n"
+
+            If ($File.Extension -In ('.sui', '.sii', '.mat')) {
+                $Content = [Regex]::Replace($Content, '(?<!@include "[\w\.\/]+")\r?\n(?!@include "[\w\.\/]+")', ' ')
+                $Content = [Regex]::Replace($Content, '\{ ', '{')
+                $Content = [Regex]::Replace($Content, ' (\} |\}$)', '$1')
+                $Content = [Regex]::Replace($Content, '\)(?=[\w\[\]]+:)', ') ')
             
-            # Trim remaining whitespaces
-            $Content = [Regex]::Replace($Content, '(?<=[\w[\]]+:)[ \t]*(?=".*)', '')
-            $Content = [Regex]::Replace($Content, '(?<=[\d"\]})])[ \t]*(?=\}+)', '')
-            $Content = [Regex]::Replace($Content, '(?<=:"[^"]*")[ \t]{2,}(?=\w)', ' ')
-            $Content = [Regex]::Replace($Content, '(?<!:[ \t]*){[ \t]+(?=\w)', '{')
-            $Content = [Regex]::Replace($Content, '[ \t]+(?=}+)', '')
+                # Trim remaining whitespaces
+                $Content = [Regex]::Replace($Content, '(?<=[\w[\]]+:)[ \t]*(?=".*)', '')
+                $Content = [Regex]::Replace($Content, '(?<=[\d"\]})])[ \t]*(?=\}+)', '')
+                $Content = [Regex]::Replace($Content, '(?<=:"[^"]*")[ \t]{2,}(?=\w)', ' ')
+                $Content = [Regex]::Replace($Content, '(?<!:[ \t]*){[ \t]+(?=\w)', '{')
+                $Content = [Regex]::Replace($Content, '[ \t]+(?=}+)', '')
+            }
+
+            If ($WriteBytes) {
+                [Byte[]]$ContentBytes = [Text.Encoding]::UTF8.GetBytes($Content)
+                [IO.File]::WriteAllBytes($File.FullName, $ContentBytes)
+            }
+            Else {Set-Content $File.FullName $Content -Force -NoNewline -Encoding UTF8}
+
+            $File.Refresh()
+
+            [Int64]$NewSize  = $File.Length
+            [Int64]$DiffSize = $OrigSize - $NewSize
+            $TotalTrimmed   += $DiffSize
+
+            [Console]::CursorLeft = 0
+            Write-Host -ForegroundColor ("White", "Green")[$NewSize -lt $OrigSize] "$OutStr$NewSize ($DiffSize)"
         }
-
-        If ($WriteBytes) {
-            [Byte[]]$ContentBytes = [Text.Encoding]::UTF8.GetBytes($Content)
-            [IO.File]::WriteAllBytes($File.FullName, $ContentBytes)
-        }
-        Else {Set-Content $File.FullName $Content -Force -NoNewline -Encoding UTF8}
-
-        $File.Refresh()
-
-        [Int64]$NewSize  = $File.Length
-        [Int64]$DiffSize = $OrigSize - $NewSize
-        $TotalTrimmed   += $DiffSize
-
-        [Console]::CursorLeft = 0
-        Write-Host -ForegroundColor ("White", "Green")[$NewSize -lt $OrigSize] "$OutStr$NewSize ($DiffSize)"
 
     }
 
