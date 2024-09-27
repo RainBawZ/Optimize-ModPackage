@@ -2,14 +2,11 @@
 A PowerShell function for optimizing, repairing and repackaging SCS mod packages in raw/extracted, ZipFS (soon™) and HashFS formats.
 
 This is a standalone function for now until I wrap it in a module.
-
----
-
+___
 ## IMPORTANT:
 ### In its current state, the unit scrubbing feature is often overly aggressive and may break several unit files while processing a mod.
 ### It is recommended to use the `-NoScrub` parameter to skip the scrubbing step entirely. Continue using the feature at your own risk.
-
----
+___
 
 ### This is a work in progress - Here be bugs and critters, so make sure to make a backup before processing a mod!
 
@@ -18,15 +15,15 @@ Requires PowerShell 7.0 or higher.
 For automatic unpacking and repackaging of HashFS v2 packages you'll require the SCS Packer executable:
 
 [https://download.eurotrucksimulator2.com/scs_packer_1_50.zip](https://download.eurotrucksimulator2.com/scs_packer_1_50.zip)
+___
 
----
-
-## How to get up and running
+# Setup guide
 
 1. Download `Optimize-ModPackage.ps1` to any location. (A dedicated directory is recommended).
 2. Open PowerShell 7 (`pwsh.exe`) and set the working directory to the directory containing the script if needed.
 3. Load the function into memory by executing `. '.\Optimize-ModPackage.ps1'`
 4. You are now set up and ready. For usage instructions use `Get-Help Optimize-ModPackage` or keep on reading.
+___
 
 ## Synopsis
 Optimizes a mod package by removing clutter.
